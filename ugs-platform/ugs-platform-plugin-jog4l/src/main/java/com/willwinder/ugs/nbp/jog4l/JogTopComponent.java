@@ -337,6 +337,14 @@ public final class JogTopComponent extends TopComponent implements UGSEventListe
             ignoreLongClick = true;
 
             continuousJogWorker.setDirection(button.getX(), button.getY(), button.getZ(), button.getA(), button.getB(), button.getC());
+            
+            if (axesAreLinked) {
+                continuousJogWorker.setDirection(button.getX() + button.getA(), button.getY() + button.getZ(), button.getZ() + button.getY(), button.getA() + button.getX(), button.getB(), button.getC());
+            }
+            else {
+                continuousJogWorker.setDirection(button.getX(), button.getY(), button.getZ(), button.getA(), button.getB(), button.getC());
+            }
+                
             continuousJogWorker.start();
         }
     }

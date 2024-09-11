@@ -1,0 +1,497 @@
+/*
+    Copyright 2018-2023 Will Winder
+
+    This file is part of Universal Gcode Sender (UGS).
+
+    UGS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    UGS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with UGS.  If not, see <http://www.gnu.org/licenses/>.
+ */
+package com.willwinder.ugs.nbp.jog4l;
+
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
+import com.willwinder.ugs.nbp.jog4l.i18n.Localization;
+import com.willwinder.universalgcodesender.model.Axis;
+import com.willwinder.universalgcodesender.model.UnitUtils;
+import com.willwinder.universalgcodesender.uielements.helpers.SteppedSizeManager;
+import com.willwinder.universalgcodesender.uielements.jog.StepSizeSpinner;
+import com.willwinder.universalgcodesender.utils.FontUtils;
+import com.willwinder.universalgcodesender.listeners.LongPressMouseListener;
+import net.miginfocom.swing.MigLayout;
+import org.openide.util.ImageUtilities;
+
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Insets;
+import java.awt.event.MouseEvent;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * A panel for displaying jog controls
+ *
+ * @author Joacim Breiler
+ */
+public class JogPanel extends JPanel implements SteppedSizeManager.SteppedSizeChangeListener, ChangeListener {
+    /**
+     * The minimum width and height of the jog buttons.
+     */
+    private static final int MINIMUM_BUTTON_SIZE = 36;
+
+    private static final float FONT_SIZE_LABEL_SMALL = 10;
+    private static final float FONT_SIZE_LABEL_MEDIUM = 12;
+    private static final float FONT_SIZE_LABEL_LARGE = 14;
+
+    /**
+     * How long should the jog button be pressed before continuous
+     * jog is activated. Given in milliseconds
+     */
+    private static final int LONG_PRESS_DELAY = 500;
+    public static final String JOG_ROTARY_BUTTON_CONSTRAINTS = "grow, hidemode 3, sg button";
+    public static final String STEP_CONSTRAINTS = "growx, hidemode 3";
+    public static final String JOG_BUTTON_CONSTRAINTS = "grow, sg button";
+
+    /**
+     * A list of listeners
+     */
+    private final Set<JogPanelListener> listeners = new HashSet<>();
+
+    /**
+     * A map with all buttons that allows bi-directional lookups with key->value and value->key
+     */
+    private final BiMap<JogPanelButtonEnum, JButton> jogButtons = HashBiMap.create();
+
+    /**
+     * Labels
+     */
+    private JLabel feedRateLabel;
+    private JLabel horzStepLabel;
+    private JLabel vertStepLabel;
+    private JLabel rotStepLabel;
+
+    /**
+     * Spinners for jog settings
+     */
+    private StepSizeSpinner feedRateSpinner;
+    private StepSizeSpinner horzStepSizeSpinner;
+    private StepSizeSpinner vertStepSizeSpinner;
+    private StepSizeSpinner rotStepSizeSpinner;
+
+    /**
+     * Special buttons
+     */
+    private JButton stealFocusButton;
+    private JButton toggleLinkedAxesButton;
+    private JButton unitToggleButton;
+    private JButton increaseStepSizeButton;
+    private JButton decreaseStepSizeButton;
+    
+
+    /**
+     * Icons
+     */
+    private final ImageIcon linkedAxesIconEnabled = ImageUtilities.loadImageIcon("icons/axes-linked.png", false);
+    private final ImageIcon linkedAxesIconDisabled = ImageUtilities.loadImageIcon("icons/axes-linked_disabled.png", false);
+    
+    public JogPanel() {
+        createComponents();
+        initPanels();
+        initListeners();
+    }
+
+    public void setLinkedAxesStatus(boolean linkedAxes) {
+        if (linkedAxes) {
+            toggleLinkedAxesButton.setIcon(linkedAxesIconEnabled);
+        } else {
+            toggleLinkedAxesButton.setIcon(linkedAxesIconDisabled);
+        }
+    }
+    
+    private void createComponents() {
+
+        Font font = FontUtils.getSansFont().deriveFont(Font.PLAIN, FONT_SIZE_LABEL_LARGE);
+
+        // Create our focus stealing button first
+        stealFocusButton = createImageButton("icons/keyboard.png");
+        stealFocusButton.setFocusable(true);
+        stealFocusButton.setToolTipText(Localization.getString("platform.plugin.jog4l.stealKeyboardFocus"));
+        stealFocusButton.addActionListener(e -> stealFocusButton.requestFocusInWindow());
+
+        // Create our toggle linked axes button
+        toggleLinkedAxesButton = new JButton();
+        toggleLinkedAxesButton.setMinimumSize(new Dimension(MINIMUM_BUTTON_SIZE, MINIMUM_BUTTON_SIZE));
+        toggleLinkedAxesButton.setMargin(new Insets(0, 0, 0, 0));
+        toggleLinkedAxesButton.setFocusable(false);
+        toggleLinkedAxesButton.setToolTipText(Localization.getString("platform.plugin.jog4l.toggleAxes"));
+        toggleLinkedAxesButton.setIcon(linkedAxesIconDisabled);
+        
+        // Create our buttons
+        Arrays.asList(JogPanelButtonEnum.values()).forEach(this::createJogButton);
+        Dimension minimumSize = new Dimension(80, 18);
+        feedRateSpinner = new StepSizeSpinner();
+        feedRateSpinner.setMinimumSize(minimumSize);
+        horzStepSizeSpinner = new StepSizeSpinner();
+        horzStepSizeSpinner.setMinimumSize(minimumSize);
+        vertStepSizeSpinner = new StepSizeSpinner();
+        vertStepSizeSpinner.setMinimumSize(minimumSize);
+        rotStepSizeSpinner = new StepSizeSpinner();
+        rotStepSizeSpinner.setMinimumSize(minimumSize);
+
+        // todo: could use a number of factory methods here to build similar stuff
+        feedRateLabel = createSettingLabel(font, Localization.getString("platform.plugin.jog4l.feedRate"));
+        feedRateLabel.setMinimumSize(new Dimension(0, 0));
+        horzStepLabel = createSettingLabel(font, Localization.getString("platform.plugin.jog4l.stepSizeHorz"));
+        horzStepLabel.setMinimumSize(new Dimension(0, 0));
+
+        vertStepLabel = createSettingLabel(font, Localization.getString("platform.plugin.jog4l.stepSizeVert"));
+        vertStepLabel.setMinimumSize(new Dimension(0, 0));
+
+        rotStepLabel = createSettingLabel(font, Localization.getString("platform.plugin.jog4l.stepSizeRot"));
+        rotStepLabel.setMinimumSize(new Dimension(0, 0));
+
+        minimumSize = new Dimension(50, 18);
+        unitToggleButton = new JButton("--");
+        unitToggleButton.setFocusable(false);
+        unitToggleButton.setMinimumSize(minimumSize);
+
+        increaseStepSizeButton = new JButton(Localization.getString("platform.plugin.jog4l.stepLarger"));
+        increaseStepSizeButton.setFocusable(false);
+        increaseStepSizeButton.setMinimumSize(minimumSize);
+
+        decreaseStepSizeButton = new JButton(Localization.getString("platform.plugin.jog4l.stepSmaller"));
+        decreaseStepSizeButton.setFocusable(false);
+        decreaseStepSizeButton.setMinimumSize(minimumSize);
+    }
+
+    private JLabel createSettingLabel(Font font, String text) {
+        JLabel label = new JLabel(text);
+        label.setHorizontalTextPosition(SwingConstants.RIGHT);
+        label.setHorizontalAlignment(SwingConstants.RIGHT);
+        label.setFont(font);
+        return label;
+    }
+
+    public void setFeedRate(int feedRate) {
+        feedRateSpinner.setValue(String.valueOf(feedRate));
+    }
+
+    public void setStepSizeHorz(double stepSize) {
+        horzStepSizeSpinner.setValue(stepSize);
+    }
+
+    public void setStepSizeVert(double stepSize) {
+        vertStepSizeSpinner.setValue(stepSize);
+    }
+
+    public void setStepSizeRot(double stepSize) {
+        rotStepSizeSpinner.setValue(stepSize);
+    }
+
+    public void setUnit(UnitUtils.Units unit) {
+        unitToggleButton.setText(unit.getDescription());
+    }
+
+    public void enabledStepSizes(boolean useStepSizeVert, boolean useStepSizeRot) {
+        if (useStepSizeVert || useStepSizeRot) {
+            horzStepLabel.setText(Localization.getString("platform.plugin.jog4l.stepSizeHorz"));
+        } else {
+            horzStepLabel.setText(Localization.getString("platform.plugin.jog4l.stepSize"));
+        }
+
+        vertStepLabel.setVisible(useStepSizeVert);
+        vertStepSizeSpinner.setVisible(useStepSizeVert);
+        rotStepLabel.setVisible(useStepSizeRot);
+        rotStepSizeSpinner.setVisible(useStepSizeRot);
+    }
+
+    public void setButtonsVisible(Axis axis, boolean visible) {
+        for (JogPanelButtonEnum buttonEnum : JogPanelButtonEnum.values()) {
+            if (buttonEnum.getAxes().contains(axis)) {
+                setButtonsVisible(buttonEnum, visible);
+            }
+        }
+    }
+
+    public void setButtonsVisible(JogPanelButtonEnum buttonEnum, boolean visible) {
+        JButton button = getButtonFromEnum(buttonEnum);
+        if (button != null) {
+            button.setVisible(visible);
+        }
+    }
+
+    private void initPanels() {
+        setLayout(new MigLayout("fill, inset 5, gap 7"));
+        add(createXYAZPanel(), "grow, wrap");
+        add(createConfigurationPanel(), "grow");
+    }
+
+    private JPanel createConfigurationPanel() {
+        JPanel configurationPanel = new JPanel();
+        configurationPanel.setLayout(new MigLayout("fill, inset 0, gap 2, flowy", "[shrinkprio 200, right][25%, shrinkprio 100][25%, center, shrinkprio 0, nogrid]", "[center][center][center]"));
+
+        configurationPanel.add(horzStepLabel, "growx");
+        configurationPanel.add(vertStepLabel, STEP_CONSTRAINTS);
+        configurationPanel.add(rotStepLabel, STEP_CONSTRAINTS);
+        configurationPanel.add(feedRateLabel, "growx, wrap");
+
+        configurationPanel.add(horzStepSizeSpinner, "growx");
+        configurationPanel.add(vertStepSizeSpinner, STEP_CONSTRAINTS);
+        configurationPanel.add(rotStepSizeSpinner, STEP_CONSTRAINTS);
+        configurationPanel.add(feedRateSpinner, "growx, wrap");
+
+        configurationPanel.add(unitToggleButton, "grow");
+        configurationPanel.add(increaseStepSizeButton, "grow");
+        configurationPanel.add(decreaseStepSizeButton, "grow");
+
+        return configurationPanel;
+    }
+
+    private JPanel createXYAZPanel() {
+        JPanel xyazPanel = new JPanel();
+        xyazPanel.setLayout(new MigLayout("fill, wrap 6, inset 0, gap 2"));
+
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_DIAG_XNEG_YPOS), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_YPOS), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_DIAG_XPOS_YPOS), JOG_BUTTON_CONSTRAINTS);
+
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_DIAG_ANEG_ZPOS), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_ZPOS), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_DIAG_APOS_ZPOS), JOG_BUTTON_CONSTRAINTS);
+
+
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_XNEG), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(stealFocusButton, JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_XPOS), JOG_BUTTON_CONSTRAINTS);
+        
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_ANEG), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(toggleLinkedAxesButton, JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_APOS), JOG_BUTTON_CONSTRAINTS);
+
+        
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_DIAG_XNEG_YNEG), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_YNEG), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_DIAG_XPOS_YNEG), JOG_BUTTON_CONSTRAINTS);
+
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_DIAG_ANEG_ZNEG), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_ZNEG), JOG_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_DIAG_APOS_ZNEG), JOG_BUTTON_CONSTRAINTS);
+        
+        
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_BNEG), JOG_ROTARY_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_BPOS), JOG_ROTARY_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_CNEG), JOG_ROTARY_BUTTON_CONSTRAINTS);
+        xyazPanel.add(getButtonFromEnum(JogPanelButtonEnum.BUTTON_CPOS), JOG_ROTARY_BUTTON_CONSTRAINTS);
+
+        return xyazPanel;
+    }
+
+    private void initListeners() {
+
+        // Creates a window size listener
+        SteppedSizeManager sizer = new SteppedSizeManager(this,
+                new Dimension(300, 0), // Scaling fonts to extra small
+                new Dimension(400, 0)  // Scaling fonts to small
+        );
+        sizer.addListener(this);
+
+
+        LongPressMouseListener longPressMouseListener = new LongPressMouseListener(LONG_PRESS_DELAY) {
+            @Override
+            protected void onMouseClicked(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return; // ignore RMB
+                }
+                JogPanelButtonEnum buttonEnum = getButtonEnumFromMouseEvent(e);
+                listeners.forEach(a -> a.onJogButtonClicked(buttonEnum));
+            }
+
+            @Override
+            protected void onMousePressed(MouseEvent e) {
+                // Not needed
+            }
+
+            @Override
+            protected void onMouseRelease(MouseEvent e) {
+                // Not needed
+            }
+
+            @Override
+            protected void onMouseLongPressed(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return; // ignore RMB
+                }
+                JogPanelButtonEnum buttonEnum = getButtonEnumFromMouseEvent(e);
+                listeners.forEach(a -> a.onJogButtonLongPressed(buttonEnum));
+            }
+
+            @Override
+            protected void onMouseLongRelease(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return; // ignore RMB
+                }
+                JogPanelButtonEnum buttonEnum = getButtonEnumFromMouseEvent(e);
+                listeners.forEach(a -> a.onJogButtonLongReleased(buttonEnum));
+            }
+        };
+
+        jogButtons.values().forEach(button -> button.addMouseListener(longPressMouseListener));
+
+        horzStepSizeSpinner.addChangeListener(this);
+        vertStepSizeSpinner.addChangeListener(this);
+        rotStepSizeSpinner.addChangeListener(this);
+        feedRateSpinner.addChangeListener(this);
+
+        unitToggleButton.addActionListener(actionEvent -> listeners.forEach(JogPanelListener::onToggleUnit));
+        increaseStepSizeButton.addActionListener(actionEvent -> listeners.forEach(JogPanelListener::onIncreaseStepSize));
+        decreaseStepSizeButton.addActionListener(actionEvent -> listeners.forEach(JogPanelListener::onDecreaseStepSize));
+        
+        toggleLinkedAxesButton.addActionListener(actionEvent -> listeners.forEach(JogPanelListener::onToggleLinkedAxes));
+    }
+
+    /**
+     * Finds the button enum based on the mouse event source
+     *
+     * @param mouseEvent the event that we want to extract the button enum from
+     * @return the enum for the button
+     */
+    private JogPanelButtonEnum getButtonEnumFromMouseEvent(MouseEvent mouseEvent) {
+        JButton releasedButton = (JButton) mouseEvent.getSource();
+        return jogButtons.inverse().get(releasedButton);
+    }
+
+    /**
+     * Returns the button from the button map using a button enum
+     *
+     * @param buttonEnum the button enum
+     * @return the button
+     */
+    private JButton getButtonFromEnum(JogPanelButtonEnum buttonEnum) {
+        return jogButtons.get(buttonEnum);
+    }
+
+    /**
+     * Creates a image button with a text.
+     *
+     * @param buttonEnum the button enumeration containing the text  icon image
+     * @return the button
+     */
+    private JButton createJogButton(JogPanelButtonEnum buttonEnum) {
+        JButton button = new JogButton(buttonEnum);
+        button.setMinimumSize(new Dimension(MINIMUM_BUTTON_SIZE, MINIMUM_BUTTON_SIZE));
+        button.addActionListener(e -> stealFocusButton.requestFocusInWindow());
+        jogButtons.put(buttonEnum, button);
+        return button;
+    }
+
+    /**
+     * Creates a image button.
+     *
+     * @param baseUri the base uri of the image
+     * @return the button
+     */
+    private JButton createImageButton(String baseUri) {
+        ImageIcon imageIcon = ImageUtilities.loadImageIcon(baseUri, false);
+        JButton button = new JButton(imageIcon);
+        button.setMinimumSize(new Dimension(MINIMUM_BUTTON_SIZE, MINIMUM_BUTTON_SIZE));
+        button.setMargin(new Insets(0, 0, 0, 0));
+        button.setFocusable(false);
+        return button;
+    }
+
+    @Override
+    public void setEnabled(boolean enabled) {
+        super.setEnabled(enabled);
+        jogButtons.values().forEach(button -> button.setEnabled(enabled));
+
+        horzStepSizeSpinner.setEnabled(enabled);
+        vertStepSizeSpinner.setEnabled(enabled);
+        rotStepSizeSpinner.setEnabled(enabled);
+        feedRateSpinner.setEnabled(enabled);
+
+        horzStepLabel.setEnabled(enabled);
+        vertStepLabel.setEnabled(enabled);
+        rotStepLabel.setEnabled(enabled);
+        feedRateLabel.setEnabled(enabled);
+
+        stealFocusButton.setEnabled(enabled);
+        toggleLinkedAxesButton.setEnabled(enabled);
+
+        unitToggleButton.setEnabled(enabled);
+        increaseStepSizeButton.setEnabled(enabled);
+        decreaseStepSizeButton.setEnabled(enabled);
+    }
+
+    @Override
+    public void onSizeChange(int size) {
+        switch (size) {
+            case 0:
+                setFontSize(FONT_SIZE_LABEL_SMALL);
+                break;
+            case 1:
+                setFontSize(FONT_SIZE_LABEL_MEDIUM);
+                break;
+            default:
+                setFontSize(FONT_SIZE_LABEL_LARGE);
+                break;
+        }
+    }
+
+    private void setFontSize(float fontSize) {
+        Font font = unitToggleButton.getFont().deriveFont(fontSize);
+        unitToggleButton.setFont(font);
+
+        font = this.feedRateLabel.getFont().deriveFont(fontSize);
+        this.feedRateLabel.setFont(font);
+
+        font = this.horzStepLabel.getFont().deriveFont(fontSize);
+        this.horzStepLabel.setFont(font);
+
+        font = this.vertStepLabel.getFont().deriveFont(fontSize);
+        this.vertStepLabel.setFont(font);
+
+        font = this.rotStepLabel.getFont().deriveFont(fontSize);
+        this.rotStepLabel.setFont(font);
+
+        font = this.increaseStepSizeButton.getFont().deriveFont(fontSize);
+        this.increaseStepSizeButton.setFont(font);
+
+        font = this.decreaseStepSizeButton.getFont().deriveFont(fontSize);
+        this.decreaseStepSizeButton.setFont(font);
+    }
+
+    public void addListener(JogPanelListener listener) {
+        this.listeners.add(listener);
+    }
+
+    @Override
+    public void stateChanged(ChangeEvent e) {
+        if (e.getSource() == vertStepSizeSpinner) {
+            this.listeners.forEach(listener -> listener.onStepSizeVertChanged(vertStepSizeSpinner.getValue()));
+        } else if (e.getSource() == horzStepSizeSpinner) {
+            this.listeners.forEach(listener -> listener.onStepSizeHorzChanged(horzStepSizeSpinner.getValue()));
+        } else if (e.getSource() == rotStepSizeSpinner) {
+            this.listeners.forEach(listener -> listener.onStepSizeRotChanged(rotStepSizeSpinner.getValue()));
+        } else if (e.getSource() == feedRateSpinner) {
+            this.listeners.forEach(listener -> listener.onFeedRateChanged(feedRateSpinner.getValue().intValue()));
+        }
+    }
+}

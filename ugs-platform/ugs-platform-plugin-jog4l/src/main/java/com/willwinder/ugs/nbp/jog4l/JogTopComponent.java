@@ -49,7 +49,7 @@ import java.awt.BorderLayout;
  * @author Joacim Breiler
  */
 @TopComponent.Description(
-        preferredID = "JogTopComponent"
+        preferredID = "Jog4lTopComponent"
 )
 @TopComponent.Registration(
         mode = Mode.LEFT_BOTTOM,
@@ -62,7 +62,7 @@ import java.awt.BorderLayout;
         path = JogTopComponent.WINOW_PATH)
 @TopComponent.OpenActionRegistration(
         displayName = "Jog 4L Controller",
-        preferredID = "JogTopComponent"
+        preferredID = "Jog4lTopComponent"
 )
 public final class JogTopComponent extends TopComponent implements UGSEventListener, JogPanelListener {
 

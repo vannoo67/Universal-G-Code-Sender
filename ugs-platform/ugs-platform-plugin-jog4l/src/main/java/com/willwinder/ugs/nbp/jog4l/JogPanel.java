@@ -20,7 +20,7 @@ package com.willwinder.ugs.nbp.jog4l;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
-import com.willwinder.ugs.nbp.jog4l.i18n.Localization;
+import com.willwinder.universalgcodesender.i18n.Localization;
 import com.willwinder.universalgcodesender.model.Axis;
 import com.willwinder.universalgcodesender.model.UnitUtils;
 import com.willwinder.universalgcodesender.uielements.helpers.SteppedSizeManager;

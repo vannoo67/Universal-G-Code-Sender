@@ -96,6 +96,12 @@ public class LocalizingService {
     public final static String JogControlActionId = "com.willwinder.ugs.nbp.core.control.JogControlTopComponent";
     public final static String JogControlCategory = CATEGORY_WINDOW;
 
+    public final static String Jog4lControlTitle = Localization.getString("platform.window.jog4lcontrol", lang);
+    public final static String Jog4lControlTooltip = Localization.getString("platform.window.jog4lcontrol.tooltip", lang);
+    public final static String Jog4lControlWindowPath = MENU_WINDOW;
+    public final static String Jog4lControlActionId = "com.willwinder.ugs.nbp.core.control.Jog4lControlTopComponent";
+    public final static String Jog4lControlCategory = CATEGORY_WINDOW;
+
     public final static String FileBrowserTitle = Localization.getString("platform.window.filebrowser", lang);
     public final static String FileBrowserTooltip = Localization.getString("platform.window.filebrowser.tooltip", lang);
     public final static String FileBrowserWindowPath = MENU_WINDOW_CLASSIC;
@@ -350,6 +356,7 @@ public class LocalizingService {
         ars.overrideActionName(LocationStatusCategory, LocationStatusActionId, LocationStatusTitle);
         ars.overrideActionName(FileBrowserCategory, FileBrowserActionId, FileBrowserTitle);
         ars.overrideActionName(JogControlCategory, JogControlActionId, JogControlTitle);
+        ars.overrideActionName(Jog4lControlCategory, Jog4lControlActionId, Jog4lControlTitle);
         ars.overrideActionName(MacrosCategory, MacrosActionId, MacrosTitle);
         ars.overrideActionName(OverridesCategory, OverridesActionId, OverridesTitle);
         ars.overrideActionName(SendStatusCategory, SendStatusActionId, SendStatusTitle);

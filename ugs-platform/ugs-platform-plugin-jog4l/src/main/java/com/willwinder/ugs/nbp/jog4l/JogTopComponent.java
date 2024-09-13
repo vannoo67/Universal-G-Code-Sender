@@ -20,7 +20,6 @@ package com.willwinder.ugs.nbp.jog4l;
 
 import com.willwinder.ugs.nbp.jog4l.actions.ShowABCStepSizeAction;
 import com.willwinder.ugs.nbp.jog4l.actions.UseSeparateStepSizeAction;
-import com.willwinder.ugs.nbp.jog4l.i18n.Localization;
 import com.willwinder.ugs.nbp.lib.Mode;
 import com.willwinder.ugs.nbp.lib.lookup.CentralLookup;
 import com.willwinder.ugs.nbp.lib.services.LocalizingService;
@@ -120,8 +119,8 @@ public final class JogTopComponent extends TopComponent implements UGSEventListe
     @Override
     protected void componentOpened() {
         super.componentOpened();
-        setName(Localization.getString("platform.plugin.jog4l.JogControlTitle"));
-        setToolTipText(Localization.getString("platform.plugin.jog4l.JogControlTooltip"));
+        setName(LocalizingService.Jog4lControlTitle);
+        setToolTipText(LocalizingService.Jog4lControlTooltip);
         updateControls();
         updateSettings();
     }
